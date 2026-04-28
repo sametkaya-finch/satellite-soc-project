@@ -3,9 +3,14 @@ import ephem
 import math
 import time
 import struct
+import socket
 
 #ISS TLE veri kaynagi 
 TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle"
+
+#ag ayarlari
+TARGET_IP = "127.0.0.1" #localhost
+TARGET_PORT = 5005      #makine2'nin dinleyecegi, bizim verileri gonderecegimiz port
 
 class SatelliteTracker:
     def __init__(self):
@@ -53,18 +58,25 @@ if __name__ == "__main__":
         #uydu takip nesnesi baslatiliyor ve kepler elemanlari (yorunge parametreleri) elde ediliyor
         tracker = SatelliteTracker()
         sequence = 0
+
+        #udp soketi (nesnesi) olusturuluyor (ipv4 ve udp kullanilacagi belirtildi) 
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        print(f"[*] UDP Soketi acildi. Hedef: {TARGET_IP}:{TARGET_PORT}\n")
         
-        #test icin 5 kez calisacak
-        while sequence < 5:
+        #test icin 10 kez calisacak
+        while sequence < 10:
             #uydunun anlik konumu enlem boylam yukseklik olarak doner
             sat_data = tracker.get_current_coordinates()
             
             #veri binary formata cevrildi 
             binary_packet = pack_telemetry_data(sequence, sat_data)
+
+            #olusturulan 24byte'lik veri aga basiliyor 
+            sock.sendto(binary_packet, (TARGET_IP, TARGET_PORT))
             
-            #ekrana okunabilir bir sekilde ve hex formatinda basildi 
+            #ekrana okunabilir bir sekilde basildi
             print(f"[SEQ: {sequence}] Enlem: {sat_data['lat']:.4f}, Boylam: {sat_data['lon']:.4f}, Irtifa: {sat_data['alt']:.2f} km")
-            print(f"Ham Bayt Ciktisi: {binary_packet.hex()}\n")
+            print(f"[->] GÖNDERİLDİ | SEQ: {sequence} | Boyut: {len(binary_packet)} byte")
             
             sequence += 1
 
@@ -73,3 +85,8 @@ if __name__ == "__main__":
             
     except Exception as e:
         print(f"[-] Sistem Hatasi: {e}")
+    finally:
+        #program bitince ya da sock nesnesi olusmus ve bir hata meydana gelirse socketi kapat portu serbest birak 
+        #bu port 5005 numarali port degil veriyi gonderdigimiz makine1 icin ayrilmis portu kapatiyoruz
+        if 'sock' in locals():
+            sock.close()    
