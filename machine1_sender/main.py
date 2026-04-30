@@ -4,6 +4,8 @@ import math
 import time
 import struct
 import socket
+import hmac     #imzalama nesnesi icin
+import hashlib  #imzalama algoritmasi icin 
 
 #ISS TLE veri kaynagi 
 TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle"
@@ -12,6 +14,9 @@ TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle
 TARGET_IP = "127.0.0.1" #localhost
 TARGET_PORT = 5005      #makine2'nin dinleyecegi, bizim verileri gonderecegimiz port
 TCP_PORT = 5006         #makine2'nin dinlyecegi tcp portu 
+
+#anahtar (secret key)
+SECRET_KEY = b"finch_ebg_atreides" #makine1 ve makine2nin bilecegi ortak gizli anahtar 
 
 class SatelliteTracker:
     def __init__(self):
@@ -52,7 +57,12 @@ def pack_telemetry_data(seq_id, data):
     #!Idfff formati: Unsigned Int(4), Double(8), Float(4), Float(4), Float(4) = 24 Byte
     payload = struct.pack('!Idfff', seq_id, timestamp, data['lat'], data['lon'], data['alt'])
     
-    return payload
+    #payload ve secret key kullanilarak imza elde edilmesi 
+    signature = hmac.new(SECRET_KEY, payload, hashlib.sha256).digest()
+    
+    #veri ile imzanin birlestirilmesi (sha256 32 bit imza uretir) 
+    return payload + signature
+
 
 if __name__ == "__main__":
     try:
@@ -128,5 +138,5 @@ if __name__ == "__main__":
         #bu port 5005 numarali port degil veriyi gonderdigimiz makine1 icin ayrilmis portu kapatiyoruz
         if 'sock' in locals():
             sock.close()    
-        if 'tcp_sock' in locals(): 
+        if tcp_sock: 
             tcp_sock.close() #tcp portu da kapaniyor 

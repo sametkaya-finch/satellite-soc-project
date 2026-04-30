@@ -1,19 +1,37 @@
 import socket
 import struct
 import threading #ayni anda hem tcp hem udp portunu dinlemek icin 
+import hmac     #imzalama nesnesi icin
+import hashlib  #imzalama algoritmasi icin
 
 #ag ayarlari
 LISTEN_IP = "0.0.0.0" #tum ag arayuzleri dinleniyor
 LISTEN_PORT = 5005    #makine1'in veri gonderdigi, makine2'nin isletim sisteminden isteyecegi port
 TCP_PORT = 5006       #tcp heartbeat icin isletim sisteminden istenen port 
 
+#anahtar (secret key)
+SECRET_KEY = b"finch_ebg_atreides" #makine1 ve makine2nin bilecegi ortak gizli anahtar 
+
 #threads arasi durum paylasimi icin bayrak 
 tcp_connected = False
 
-def unpack_telemetry_data(binary_data):
+#seq numarasini tutacak (replay attack korumasi)
+last_seq_id = -1 
+
+def verify_and_unpack(data):
+
+    payload = data[:24]            #ilk 24 byte gercek veri 
+    received_signature = data[24:] #son 32 byte hmac izmasi 
+
+    #gelen veriyi kullan ve ortak gizli anahtarla imza olustur 
+    expected_signature = hmac.new(SECRET_KEY, payload, hashlib.sha256).digest()
+
+    #imzalari karsilastir (== yerine compare_digest cunku hacker tarafindan yanlis olan bit tespit edilip dogrusu bulunabilir) 
+    if not hmac.compare_digest(expected_signature, received_signature):
+        raise ValueError("GECERSIZ IMZA (Spoofing/Manipulation Tespiti)")
     
     #gelen 24 bytelik veri tekrar eski haline getiriliyor 
-    unpacked = struct.unpack('!Idfff', binary_data)
+    unpacked = struct.unpack('!Idfff', payload)
     
     return {
         "seq_id": unpacked[0],
@@ -84,20 +102,35 @@ if __name__ == "__main__":
         #surekli dinleme modunda kalacak
         while True:
             try:
-                #recvform ile gelen data ve gonderen ip adresi alinir. kesin 24 byte gelecegi icin 24 yazildi.
-                #daha yuksek yazilabilirdi. veri 24byte oldugu icin dataya yine 24 yazilirdi.
+                #recvform ile gelen data ve gonderen ip adresi alinir. 56byte (24 veri + 32 hmac) gelecek
                 #2 saniye icinde veri gelmezse excepte duser
-                data, addr = sock.recvfrom(24)
+                data, addr = sock.recvfrom(56)
             
-                #gelen veri 24byte ise yani cop veri degilse 
-                if len(data) == 24:
-                    parsed_data = unpack_telemetry_data(data)
-                    print(f"[<-] VERİ ALINDI | Kaynak IP: {addr[0]}")
-                    print(f"    SEQ   : {parsed_data['seq_id']}")
-                    print(f"    Enlem : {parsed_data['lat']:.4f}")
-                    print(f"    Boylam: {parsed_data['lon']:.4f}")
-                    print(f"    Irtifa: {parsed_data['alt']:.2f} km")
-                    print("-" * 40)
+                #gelen veri 56byte ise yani cop veri degilse 
+                if len(data) == 56:
+                    try:
+                        #imzayi dogrula her sey uygunsa 24bytelik veri donsun 
+                        parsed_data = verify_and_unpack(data)
+
+                        #replay attack korumasi 
+                        current_seq = parsed_data['seq_id']
+
+                        if current_seq <= last_seq_id:
+                            print(f"[!] DROP (REPLAY ATTACK): Eski/Tekrar eden paket engellendi (SEQ: {current_seq})")
+                            continue #paketi cope at bir sonraki pakete gec (donguye tekrar gir) 
+                        
+                        #her sey yolundaysa son okunan seq numarasini guncelle 
+                        last_seq_id = current_seq
+
+                        print(f"[<-] VERİ ALINDI | Kaynak IP: {addr[0]}")
+                        print(f"    SEQ   : {parsed_data['seq_id']}")
+                        print(f"    Enlem : {parsed_data['lat']:.4f}")
+                        print(f"    Boylam: {parsed_data['lon']:.4f}")
+                        print(f"    Irtifa: {parsed_data['alt']:.2f} km")
+                        print("-" * 40)
+                    except ValueError as e:
+                        #imza dogrulanamazsa buraya duser 
+                        print(f"[!] DROP (GUVENLIK): {e} | Kaynak IP: {addr[0]}")    
                 else:
                     print(f"[!] Dikkat: Gecersiz boyutta paket geldi ({len(data)} byte)")
             except socket.timeout:
