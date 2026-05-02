@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC Komuta Merkezi</title>
+    
+    <!-- leaflet harita kutuphanesi -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- harici css dosyasi -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <div class="panel header">
+        <h1>SOC Otonom Karar Merkezi</h1>
+        <div class="status-indicator">SİSTEM AKTİF: <span id="current-mode">NORMAL</span></div>
+    </div>
+
+    <!-- sol sutun: harita ve loglar -->
+    <div class="left-column">
+        <div class="panel map-panel">
+            <h3 class="panel-title">Canlı Yörünge Takibi</h3>
+            <div id="map"></div>
+        </div>
+        <div class="panel">
+            <h3 class="panel-title">Güvenlik Duvarı Logları (SIEM)</h3>
+            <div id="siem-logs"></div>
+        </div>
+    </div>
+
+    <!-- sag sutun: veriler ve kontroller  -->
+    <div class="right-column">
+        <div class="panel">
+            <h3 class="panel-title">Canlı Telemetri</h3>
+            <!-- İSTEK 1: Canlı Telemetri Sırası Düzenlendi -->
+            <div class="telemetry-grid">
+                <div class="data-box">SEQ No<span id="t-seq">0</span></div>
+                <div class="data-box">İrtifa (km)<span id="t-alt">0.00</span></div>
+                <div class="data-box">Enlem<span id="t-lat">0.0000</span></div>
+                <div class="data-box">Boylam<span id="t-lon">0.0000</span></div>
+            </div>
+        </div>
+
+        <!-- canli grafik analizi -->
+        <div class="panel">
+            <h3 class="panel-title">Canlı Metrik Analizi</h3>
+            <div class="charts-container">
+                <div class="chart-box">
+                    <canvas id="deltaChart"></canvas>
+                </div>
+                <div class="chart-box">
+                    <canvas id="altChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3 class="panel-title red-team-title">Red Team: Komuta Kontrol (C&C)</h3>
+            <div class="controls">
+                <button class="btn-normal full-width-btn" onclick="sendCommand('NORMAL')">Normale Dön</button>
+                <button class="btn-attack" onclick="sendCommand('SPOOF')">SPOOFING</button>
+                <button class="btn-attack" onclick="sendCommand('DRIFT')">DRIFT</button>
+                <button class="btn-attack" onclick="sendCommand('JITTER')">JITTER</button>
+                <button class="btn-attack" onclick="sendCommand('DOS')">DoS Flood</button>
+                <button class="btn-attack" onclick="sendCommand('OUT_OF_ORDER')">Out of Order</button>
+            </div>
+        </div>
+
+        <div class="panel ysa-panel">
+            <h3 class="panel-title ysa-title">L7 YSA Tespit Motoru (1D-CNN + GRU)</h3>
+            
+            <!-- modelin o anki karari -->
+            <div class="decision-container">
+                <span class="decision-label">Anlık Ağ Durumu:</span>
+                <span id="ysa-decision" class="decision-text">ANALİZ BEKLENİYOR</span>
+            </div>
+
+            <!-- guven skoru bari -->
+            <div class="confidence-container">
+                <div class="confidence-header">
+                    <span>Güven Skoru (Confidence)</span>
+                    <span id="confidence-text">0%</span>
+                </div>
+                <div class="progress-bg">
+                    <div id="confidence-bar" class="progress-fill safe-fill" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- ozellik onem derecesi (Explainable AI) -->
+            <div id="xai-box" class="xai-box">
+                <span class="xai-label">KARAR NEDENİ (Feature Importance):</span>
+                <span id="xai-reason" class="xai-text">YSA başlatılıyor...</span>
+            </div>
+
+            <!-- son 50 paketin isi haritasi -->
+            <h4 class="heatmap-title">Son 50 Paket Özeti (Heatmap)</h4>
+            <div id="timeline" class="timeline-container">
+                <!-- js ile kutular eklenecek  -->
+            </div>
+        </div>
+    </div>
+
+    <!-- harici js dosyasi sayfa yuklendikten sonra calisacak -->
+    <script src="/static/app.js"></script>
+</body>
+</html>
