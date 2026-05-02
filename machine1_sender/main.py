@@ -88,8 +88,7 @@ if __name__ == "__main__":
         except Exception:
             print("[!] TCP Baglantisi yok, Makine 2 araniyor...")
         
-        #test icin 10 kez calisacak
-        while sequence < 10:
+        while True:
             #uydunun anlik konumu enlem boylam yukseklik olarak doner
             sat_data = tracker.get_current_coordinates()
             

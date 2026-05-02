@@ -1,8 +1,10 @@
 import socket
 import struct
 import threading #ayni anda hem tcp hem udp portunu dinlemek icin 
-import hmac     #imzalama nesnesi icin
-import hashlib  #imzalama algoritmasi icin
+import hmac      #imzalama nesnesi icin
+import hashlib   #imzalama algoritmasi icin
+import time      #rate limiting icin eklendi 
+import requests  #makine4'e http istegi atmak icin 
 
 #ag ayarlari
 LISTEN_IP = "0.0.0.0" #tum ag arayuzleri dinleniyor
@@ -12,11 +14,28 @@ TCP_PORT = 5006       #tcp heartbeat icin isletim sisteminden istenen port
 #anahtar (secret key)
 SECRET_KEY = b"finch_ebg_atreides" #makine1 ve makine2nin bilecegi ortak gizli anahtar 
 
+#makine4 (soc) api adresi 
+MAKINE4_API = "http://127.0.0.1:8000/api/telemetry"
+
 #threads arasi durum paylasimi icin bayrak 
 tcp_connected = False
 
 #seq numarasini tutacak (replay attack korumasi)
 last_seq_id = -1 
+
+#dos tespiti (rate limitir) icin sayac degiskenleri 
+paket_sayaci = 0
+son_sifirlama_zamani = time.time()
+dos_baslangic_zamani = None   #dos'un ne zaman basladigini tutar 
+dos_aktif = False             #dos devam ediyor mu 
+
+
+#verileri ve alarmlari makine4'e ileten fonksiyon 
+def send_to_soc(data_dict):
+    try:
+        requests.post(MAKINE4_API, json=data_dict, timeout=0.5)
+    except Exception:
+        pass #makine4 kapaliysa makine2 kilitlenmesin diye 
 
 def verify_and_unpack(data):
 
@@ -105,6 +124,32 @@ if __name__ == "__main__":
                 #recvform ile gelen data ve gonderen ip adresi alinir. 56byte (24 veri + 32 hmac) gelecek
                 #2 saniye icinde veri gelmezse excepte duser
                 data, addr = sock.recvfrom(56)
+
+                #rate limiting ile dos kontrolu
+                su_an = time.time()
+ 
+                if su_an - son_sifirlama_zamani > 1.0:
+                    if dos_aktif and paket_sayaci <= 10:
+                        sure = su_an - dos_baslangic_zamani
+                        msg = f"[BİLGİ] DoS SONA ERDİ. Toplam sure: {sure:.1f}s"
+                        print(f"[+] {msg}")
+                        send_to_soc({"type": "alert", "message": msg})
+                        dos_aktif = False
+                        dos_baslangic_zamani = None
+ 
+                    paket_sayaci = 0
+                    son_sifirlama_zamani = su_an
+                
+                paket_sayaci += 1
+ 
+                if paket_sayaci > 10: #saniyede 10 paketten fazlasi dos demektir
+                    if not dos_aktif:
+                        dos_aktif = True
+                        dos_baslangic_zamani = time.time()
+                        msg = "[KRİTİK] DoS FLOOD TESPİT EDİLDİ!"
+                        print(f"[!] DROP (RATE LIMIT): {msg}")
+                        send_to_soc({"type": "alert", "message": msg})
+                    continue #paketi dogrudan cope at diger kontrollere gerek yok
             
                 #gelen veri 56byte ise yani cop veri degilse 
                 if len(data) == 56:
@@ -115,9 +160,13 @@ if __name__ == "__main__":
                         #replay attack korumasi 
                         current_seq = parsed_data['seq_id']
 
+                        paket_zamani = parsed_data['timestamp'] #paketin uretim zamani 
+
                         if current_seq <= last_seq_id:
-                            print(f"[!] DROP (REPLAY ATTACK): Eski/Tekrar eden paket engellendi (SEQ: {current_seq})")
-                            continue #paketi cope at bir sonraki pakete gec (donguye tekrar gir) 
+                            msg = f"[UYARI] Eski/Tekrar eden paket engellendi (SEQ: {current_seq})"
+                            print(f"[!] DROP (OUT-OF-ORDER): {msg}")
+                            send_to_soc({"type": "alert", "message": msg})
+                            continue #paketi cope at ysaya gitmesin 
                         
                         #her sey yolundaysa son okunan seq numarasini guncelle 
                         last_seq_id = current_seq
@@ -128,9 +177,22 @@ if __name__ == "__main__":
                         print(f"    Boylam: {parsed_data['lon']:.4f}")
                         print(f"    Irtifa: {parsed_data['alt']:.2f} km")
                         print("-" * 40)
+                        
+                        #dos ve outoforder korumasini gecen paketler ysaya teslim edielcek 
+                        telemetry_payload = {
+                            "type": "telemetry",
+                            "seq": parsed_data['seq_id'],
+                            "lat": parsed_data['lat'],
+                            "lon": parsed_data['lon'],
+                            "alt": parsed_data['alt'],
+                            "paket_timestamp": paket_zamani 
+                        }
+                        send_to_soc(telemetry_payload)
+
                     except ValueError as e:
-                        #imza dogrulanamazsa buraya duser 
-                        print(f"[!] DROP (GUVENLIK): {e} | Kaynak IP: {addr[0]}")    
+                        msg = f"{e} | Kaynak IP: {addr[0]}"
+                        print(f"[!] DROP (GUVENLIK): {msg}")    
+                        send_to_soc({"type": "alert", "message": msg}) 
                 else:
                     print(f"[!] Dikkat: Gecersiz boyutta paket geldi ({len(data)} byte)")
             except socket.timeout:
