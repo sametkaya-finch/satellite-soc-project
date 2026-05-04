@@ -1,0 +1,5 @@
+requests
+numpy
+tensorflow
+scikit-learn
+joblib

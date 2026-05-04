@@ -30,7 +30,9 @@ async def serve_dashboard():
     return FileResponse("index.html")
 
 MAKINE3_CMD_PORT = 5007
-CSV_FILE = "dataset.csv"
+CSV_FILE = "data/dataset.csv"
+
+os.makedirs("data", exist_ok=True)
 
 #csv dosyasi yoksa olustur ve basliklarini yaz
 if not os.path.exists(CSV_FILE):
@@ -76,7 +78,7 @@ async def send_command(attack_type: str):
             return {"status": "error", "details": "Gecersiz saldiri turu"}
 
         cmd_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        cmd_sock.connect(("127.0.0.1", MAKINE3_CMD_PORT))
+        cmd_sock.connect(("172.20.0.3", MAKINE3_CMD_PORT))
         cmd_sock.sendall(attack_type.encode())
         cmd_sock.close()
 

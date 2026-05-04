@@ -19,15 +19,15 @@ scaler = joblib.load('scaler.pkl')
 model  = load_model('model.h5')
 
 #kayan pencere (sliding window) tamponu
-#model (10, 4) tensor beklediginden maxlen=10 olarak ayarlandi
-TIME_STEPS = 10
+TIME_STEPS = 30
+NUM_FEATURES = 5
 window_buffer = deque(maxlen=TIME_STEPS)
 
 #sinif etiketleri
 CLASS_NAMES = ['NORMAL', 'SPOOF', 'DRIFT', 'JITTER']
 
 #tf graph isitma (warm-up): ilk tahmin isleminin (inference) gecikme latency'sini onlemek icin
-dummy_data = np.zeros((1, TIME_STEPS, 4))
+dummy_data = np.zeros((1, TIME_STEPS, NUM_FEATURES))
 model.predict(dummy_data, verbose=0)
 print("[+] YSA Cikarim Motoru (Inference Engine) Hazir.\n")
 
@@ -37,16 +37,19 @@ LISTEN_PORT = 5005       #makine1'in veri gonderdigi, makine2'nin isletim sistem
 TCP_PORT    = 5006       #tcp heartbeat icin isletim sisteminden istenen port
 
 #anahtar (secret key)
-SECRET_KEY = b"finch_ebg_atreides" #makine1 ve makine2nin bilecegi ortak gizli anahtar
+SECRET_KEY = os.environ["SECRET_KEY"].encode() #makine1 ve makine2nin bilecegi ortak gizli anahtar
 
 #makine4 (soc) api adresi
-MAKINE4_API = "http://127.0.0.1:8000/api/telemetry"
+MAKINE4_API = "http://172.20.0.5:8000/api/telemetry"
 
 #threads arasi durum paylasimi icin bayrak
 tcp_connected = False
 
 #seq numarasini tutacak (replay attack korumasi)
 last_seq_id = -1
+
+prev_lat = None
+prev_lon = None
 
 #dos tespiti (rate limiter) icin sayac degiskenleri
 paket_sayaci       = 0
@@ -202,24 +205,50 @@ if __name__ == "__main__":
                         #her sey yolundaysa son okunan seq numarasini guncelle
                         last_seq_id = current_seq
 
-                        #ysa on isleme ve cikarim 
-
-                        #delta hesabi: m2'nin paketi aldigi an ile paketin uretildigi arasindaki fark
-                        #jitter saldirisi orijinal timestamp'i korudugu icin bu deger yukselir
                         delta = max(0.0, time.time() - paket_zamani)
 
-                        #ozellik vektorunu tampona ekle: [lat, lon, alt, delta]
-                        window_buffer.append([parsed_data['lat'], parsed_data['lon'], parsed_data['alt'], delta])
+                        lat_diff = (parsed_data['lat'] - prev_lat) if prev_lat is not None else 0.0
+                        lon_diff = (parsed_data['lon'] - prev_lon) if prev_lon is not None else 0.0
+                        prev_lat = parsed_data['lat']
+                        prev_lon = parsed_data['lon']
+
+                        window_buffer.append([
+                            parsed_data['lat'],
+                            parsed_data['lon'],
+                            parsed_data['alt'],
+                            delta,
+                            lat_diff,
+                            lon_diff,
+                        ])
 
                         ysa_karari_str    = "ANALIZ_BEKLENIYOR"
                         guven_skoru_float = 0.0
 
-                        #tampon 10 pakete ulastiginda model predict calistir
+                        #tampon 50 pakete ulastiginda model predict calistir
                         if len(window_buffer) == TIME_STEPS:
-                            #veriyi tensor boyutuna getir ve olceklendir
-                            raw_window    = np.array(window_buffer)
-                            scaled_window = scaler.transform(raw_window)
-                            tensor_input  = np.expand_dims(scaled_window, axis=0) #(1, 10, 4)
+                            raw_window = np.array(window_buffer)  # (30, 6)
+ 
+                            x_idx = np.arange(TIME_STEPS)
+ 
+                            lat_fit     = np.polyfit(x_idx, raw_window[:, 0], 1)
+                            lat_res_std = np.std(raw_window[:, 0] - np.polyval(lat_fit, x_idx))
+ 
+                            lon_fit     = np.polyfit(x_idx, raw_window[:, 1], 1)
+                            lon_res_std = np.std(raw_window[:, 1] - np.polyval(lon_fit, x_idx))
+ 
+                            lat_res_col = np.full((TIME_STEPS, 1), lat_res_std)
+                            lon_res_col = np.full((TIME_STEPS, 1), lon_res_std)
+ 
+                            full_window = np.concatenate([
+                                raw_window[:, 3:4], 
+                                raw_window[:, 4:5], 
+                                raw_window[:, 5:6], 
+                                lat_res_col, 
+                                lon_res_col
+                            ], axis=1)
+                            
+                            scaled_window = scaler.transform(full_window)
+                            tensor_input  = np.expand_dims(scaled_window, axis=0)  # (1, 50, 8)
 
                             #cikarim (inference)
                             predictions          = model.predict(tensor_input, verbose=0)

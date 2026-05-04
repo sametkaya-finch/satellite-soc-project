@@ -101,7 +101,7 @@ ws.onmessage = function(event) {
             ysaDecision.style.color = "var(--text-muted)";
             confidenceBar.className = "progress-fill";
             confidenceBar.style.backgroundColor = "var(--border-dark)";
-            xaiReason.innerText = "Tampon doluyor (10 paket gerekli). Lütfen bekleyin...";
+            xaiReason.innerText = "Tampon doluyor (30 paket gerekli). Lütfen bekleyin...";
             xaiBox.style.borderLeftColor = "var(--text-muted)";
         } 
         else if (karar === "NORMAL") {
@@ -122,15 +122,15 @@ ws.onmessage = function(event) {
             
             if (karar === "SPOOF") {
                 boxClass = "box-spoof";
-                xaiReason.innerText = "YSA (1D-CNN): Koordinat ve irtifa verilerinde fizik kurallarına aykırı, açıklanamaz bir ani sıçrama (uzamsal anomali) tespit etti.";
+                xaiReason.innerText = "YSA (Stacked GRU): Koordinat ve irtifa verilerinde fizik kurallarına aykırı, açıklanamaz bir ani sıçrama (uzamsal anomali) tespit etti.";
             } 
             else if (karar === "DRIFT") {
                 boxClass = "box-drift";
-                xaiReason.innerText = "YSA (GRU): Zaman serisi boyunca uydunun rotasında istikrarlı ve birikimli bir mikro-sapma (yörünge kayması) eğilimi saptadı.";
+                xaiReason.innerText = "YSA (Stacked GRU): Zaman serisi boyunca uydunun rotasında istikrarlı ve birikimli bir mikro-sapma (yörünge kayması) eğilimi saptadı.";
             } 
             else if (karar === "JITTER") {
                 boxClass = "box-jitter";
-                xaiReason.innerText = "YSA (GRU): Uzamsal veriler normal olmasına rağmen, paket varış sürelerinde (Delta metriği) düzensiz ağ gecikmeleri ve zamanlama anomalisi yakaladı.";
+                xaiReason.innerText = "YSA (Stacked GRU) : Uzamsal veriler normal olmasına rağmen, paket varış sürelerinde (Delta metriği) düzensiz ağ gecikmeleri ve zamanlama anomalisi yakaladı.";
             }
         }
 

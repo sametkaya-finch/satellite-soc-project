@@ -1,0 +1,59 @@
+version: '3.8'
+
+networks:
+  mission_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+services:
+
+  makine2:
+    build: ./machine2_receiver
+    container_name: machine2_receiver
+    networks:
+      mission_net:
+        ipv4_address: 172.20.0.3
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+    restart: unless-stopped
+
+  makine1:
+    build: ./machine1_sender
+    container_name: machine1_sender
+    networks:
+      mission_net:
+        ipv4_address: 172.20.0.2
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      - makine2
+    restart: unless-stopped
+
+  makine4:
+    build: ./machine4_dashboard
+    container_name: machine4_dashboard
+    networks:
+      mission_net:
+        ipv4_address: 172.20.0.5
+    ports:
+      - "8000:8000"
+    depends_on:        
+      - makine2
+    volumes:
+      - ./training_and_data:/app/data
+    restart: unless-stopped
+
+  makine3:
+    build: ./machine3_attacker
+    container_name: machine3_attacker
+    network_mode: "service:makine2" 
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    depends_on:
+      - makine2
+    restart: unless-stopped

@@ -6,17 +6,18 @@ import struct
 import socket
 import hmac     #imzalama nesnesi icin
 import hashlib  #imzalama algoritmasi icin 
+import os
 
 #ISS TLE veri kaynagi 
 TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle"
 
 #ag ayarlari
-TARGET_IP = "127.0.0.1" #localhost
+TARGET_IP = "172.20.0.3" #localhost
 TARGET_PORT = 5005      #makine2'nin dinleyecegi, bizim verileri gonderecegimiz port
 TCP_PORT = 5006         #makine2'nin dinlyecegi tcp portu 
 
 #anahtar (secret key)
-SECRET_KEY = b"finch_ebg_atreides" #makine1 ve makine2nin bilecegi ortak gizli anahtar 
+SECRET_KEY = os.environ["SECRET_KEY"].encode() #makine1 ve makine2nin bilecegi ortak gizli anahtar 
 
 class SatelliteTracker:
     def __init__(self):
