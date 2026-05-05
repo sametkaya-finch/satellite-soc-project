@@ -37,7 +37,7 @@ LISTEN_PORT = 5005       #makine1'in veri gonderdigi, makine2'nin isletim sistem
 TCP_PORT    = 5006       #tcp heartbeat icin isletim sisteminden istenen port
 
 #anahtar (secret key)
-SECRET_KEY = os.environ["SECRET_KEY"].encode() #makine1 ve makine2nin bilecegi ortak gizli anahtar
+SECRET_KEY = os.environ.get("SECRET_KEY", "finch_ebg_atreides").encode() #makine1 ve makine2nin bilecegi ortak gizli anahtar
 
 #makine4 (soc) api adresi
 MAKINE4_API = "http://172.20.0.5:8000/api/telemetry"

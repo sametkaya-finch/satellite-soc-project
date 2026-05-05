@@ -14,7 +14,7 @@ IFACE      = "eth0"
 TARGET_IP  = "127.0.0.1"
 TARGET_PORT = 5005  #makine2'nin dinledigi port
 CMD_PORT    = 5007  #makine4'ten (gui) gelecek saldiri komutlarinin dinlenecegi port
-COMPROMISED_KEY = os.environ["SECRET_KEY"].encode() #calinmis anahtar
+COMPROMISED_KEY = os.environ.get("SECRET_KEY", "finch_ebg_atreides").encode() #calinmis anahtar
 
 current_attack_mode  = "NORMAL" #NORMAL, DOS, SPOOF, DRIFT, JITTER, OUT_OF_ORDER
 last_sniffed_payload = None     #araya girip degistirmek icin son yakalanan veri

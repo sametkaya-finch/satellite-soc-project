@@ -17,7 +17,7 @@ TARGET_PORT = 5005      #makine2'nin dinleyecegi, bizim verileri gonderecegimiz 
 TCP_PORT = 5006         #makine2'nin dinlyecegi tcp portu 
 
 #anahtar (secret key)
-SECRET_KEY = os.environ["SECRET_KEY"].encode() #makine1 ve makine2nin bilecegi ortak gizli anahtar 
+SECRET_KEY = os.environ.get("SECRET_KEY", "finch_ebg_atreides").encode() #makine1 ve makine2nin bilecegi ortak gizli anahtar 
 
 class SatelliteTracker:
     def __init__(self):
